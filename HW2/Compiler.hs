@@ -67,6 +67,15 @@ parseTemps (Gep s _ _ _) = [s]
 compileFunction :: Types -> (String, Function) -> X86.Prog
 compileFunction = error "Unimplemented"
 
+
+--function prologue
+-- 1. Push rbp
+-- 2. mov rsp into rbp
+-- 3. sub from rsp sizof temps
+-- function epilogue
+-- 1. mvp rbp into rsp
+-- 2. pop rbp
+-- 3. retq
 --temps of cfg
 --sub space from rsp
 --end function 
@@ -133,12 +142,12 @@ data Operation =
 
 compileInstr :: Types -> TemporaryMap -> LL.Instruction -> [X86.SourceInstr]
 compileInstr ty tm (Bin s opator typ opand1 opand2) = binOp (Bin s opator typ opand1 opand2) tm
-compileInstr ty tm (Alloca s t) = error "i" --move rsp by sizeof t
+compileInstr ty tm (Alloca s t) = error "i" --sub rsp by sizeof t store new 
 compileInstr ty tm (Load s t o) = error "i" --move thing pointed to by operand into string
 compileInstr ty tm (Store t o1 o2) = error "i" --move o1 into thing pointed at by o2
-compileInstr ty tm (Icmp s c t o1 o2) =  [icmp (compileOperand tm s) c t (compileOperand o1 tm)(compileOperand o2 tm)]--icmp ne i64 %19, 0
-compileInstr ty tm (Call s t s2 tos) = error "i" --sub from rsp appropriate space and callq func name then add back to rsp
-compileInstr ty tm (Bitcast s t o t2) = error "i" --changes operand from type t to type t2
+compileInstr ty tm (Icmp s c t o1 o2) =  [cmpq (compileOperand tm s) c t (compileOperand o1 tm)(compileOperand o2 tm)]--icmp ne i64 %19, note: zero temporary. and  use set to read condition flag and set tempr
+compileInstr ty tm (Call s t s2 tos) = error "i" --sub from rsp appropriate space and callq func name then add back to rsp put first 6 args in regs and then alloc stack space and cleanup when done
+compileInstr ty tm (Bitcast s t o t2) = error "i" --changes operand from type t to type t2 really just a move
 
 
 binOp :: LL.Instruction -> TemporaryMap -> [X86.SourceInstr]
