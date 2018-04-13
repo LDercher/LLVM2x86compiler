@@ -50,9 +50,10 @@ compileFunctions named = concatMap (compileFunction named)
 type TemporaryMap = [(String, X86.SourceOperand)]
 
 temporaries :: Cfg -> [String]
-temporaries = error "Unimplemented"
+temporaries (first,rest) = concatMap parseTemps (concatMap fst (map snd blocks))
+                            where blocks = ("^",first):rest
 
-parseTemps :: Instruction -> [String]
+parseTemps :: LL.Instruction -> [String]
 parseTemps (Bin s _ _ _ _) = [s]
 parseTemps (Alloca s _) = [s]
 parseTemps (Load s _ _ ) = [s]
