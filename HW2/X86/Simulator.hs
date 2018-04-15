@@ -208,7 +208,7 @@ step m0 = op operands m1
               error "wrong number of operands for call"
 
           ret [] m0 =
-              setRegister RSP (getRegister RSP m0 - 8) $
+              setRegister RSP (getRegister RSP m0 + 8) $
               setRIP (getQuad (getRegister RSP m0) m0) m0
           ret _ _ = error "wrong number of operands for ret"
 
