@@ -66,7 +66,7 @@ parseTemps (Gep s _ _ _) = [s]
 -- temporaries takes the first string from insts and puts them in list
 
 compileFunction :: Types -> (String, Function) -> X86.Prog
-compileFunction = error "Unimplemented"
+compileFunction tys (s,f) = error "i"--[(s,False,[])]
 
 
 --function prologue
@@ -82,93 +82,40 @@ compileFunction = error "Unimplemented"
 --end function 
 
 compileBlock :: Types -> TemporaryMap -> Block -> [X86.SourceInstr]
-compileBlock = error "Unimplemented"
+compileBlock ts tm (insts,term) = concatMap (compileInstr ts tm) insts ++ (compileTerm tm term)
 
 compileOperand :: TemporaryMap -> LL.Operand -> X86.SourceOperand
 compileOperand tm (Const i) = Imm (Literal i)
 compileOperand tm (Gid s) = IndImm (Label s)
 compileOperand tm (Uid s) = fromJust (lookup s tm)
 
-
-{-- 
-
-LL.operand
-data Operand = Const Int64 | Gid String | Uid String
-  deriving (Eq, Read, Show)
-
-data Instruction
-    = Bin String Operator Type Operand Operand  -- %uid = binop t op, op
-    | Alloca String Type                        -- %uid = alloca t
-    | Load String Type Operand                  -- %uid = load t, t* op
-    | Store Type Operand Operand                -- store t op1, t* op2
-    | Icmp String Condition Type Operand Operand -- %uid = icmp rel t op1 op2
-    | Call String Type String [(Type, Operand)] -- %uid = call ret_ty name(t1 op1, t2 op2, ...)
-    | Bitcast String Type Operand Type          -- %uid = bitcast t1 op to t2
-    | Gep String Type Operand [Operand]         -- %uid = getelementptr t op, i64 op1, i64 op2
-                                                --    .. or i32, if accessing struct...
-  deriving (Eq, Read, Show)
-
-X86.Operand
-
-data Immediate =
-    Literal Int64
-  | Label String
-  deriving (Eq, Show)
-
-data Operand imm =
-    Imm imm                 -- $5
-  | Reg Register            -- %rax
-  | IndImm imm              -- (label)
-  | IndReg Register         -- (%rax)
-  | IndBoth Int64 Register  -- -4(%rax)
-  deriving (Eq, Read, Show)
-
-type SourceOperand = Operand Immediate
-
-type SourceInstr = Instruction Immediate
-
-type Instruction imm = (Operation, [Operand imm])
-
-data Operation =
-    movq | Pushq | Popq
-  | Leaq
-  | Incq | Decq | Negq | Notq
-  | Addq | Subq | Imulq | Xorq | Orq | Andq
-  | Shlq | Sarq | Shrq
-  | Jmp | J Condition
-  | Cmpq | Set Condition
-  | Callq | Retq
-  deriving (Eq, Read, Show)
---}
-
 compileInstr :: Types -> TemporaryMap -> LL.Instruction -> [X86.SourceInstr]
 compileInstr ty tm (Bin s opator typ opand1 opand2) = binOp (Bin s opator typ opand1 opand2) tm
-compileInstr ty tm (Alloca s t) = error "i" --sub rsp by sizeof t store new 
-compileInstr ty tm (Load s t o) = error "i" --move thing pointed to by operand into string
-compileInstr ty tm (Store t o1 o2) = error "i" --move o1 into thing pointed at by o2
-compileInstr ty tm (Icmp s c t o1 o2) =  [cmpq (compileOperand tm s) c t (compileOperand o1 tm)(compileOperand o2 tm)]--icmp ne i64 %19, note: zero temporary. and  use set to read condition flag and set tempr
+compileInstr ty tm (Alloca s t) = [(Subq, [Imm (Literal (sizeOf ty t)),Reg RSP])] --sub rsp by sizeof t store new 
+compileInstr ty tm (Load s t o) = [(Movq,[(fromJust(lookup s tm)), Reg RAX]),(Movq,[IndReg RAX,Reg RAX]),(Movq,[Reg RAX,(compileOperand tm o)])] --move thing pointed to by operand into string
+compileInstr ty tm (Store t o1 o2) = [(Movq, [(compileOperand tm o1),Reg RAX]),(Movq,[(compileOperand tm o2), Reg RCX]),(Movq,[Reg RAX, IndReg RCX])]--move o1 into thing pointed at by o2 
+compileInstr ty tm (Icmp s c t o1 o2) =  [(Movq,[(Imm (Literal 0)),(fromJust(lookup s tm))]),(Cmpq, [(compileOperand tm o1),(compileOperand tm o2)]),(Set c,[(fromJust(lookup s tm))])]--icmp ne i64 %19, note: zero temporary. and  use set to read condition flag and set tempr
 compileInstr ty tm (Call s t s2 tos) = error "i" --sub from rsp appropriate space and callq func name then add back to rsp put first 6 args in regs and then alloc stack space and cleanup when done
-compileInstr ty tm (Bitcast s t o t2) = error "i" --changes operand from type t to type t2 really just a move
+compileInstr ty tm (Bitcast s t o t2) = error "i"--changes operand from type t to type t2 really just a move
 
+--cond2Op :: Condition -> X86.SourceOperand
+--cond2Op 
 
 binOp :: LL.Instruction -> TemporaryMap -> [X86.SourceInstr]
-binOp (Bin s Add ty opand1 opand2) tm = [movq (compileOperand tm opand1) RAX, addq (compileOperand tm opand2) RAX, movq RAX (compileOperand tm s)]
-binOp (Bin s Sub ty opand1 opand2) tm = [movq (compileOperand tm opand1) RAX, subq (compileOperand tm opand2) RAX, movq RAX (compileOperand tm s)]
-binOp (Bin s Mul ty opand1 opand2) tm = [movq (compileOperand tm opand1) RAX, Imulq (compileOperand tm opand2) RAX, movq RAX (compileOperand tm s)]
-binOp (Bin s Shl ty opand1 opand2) tm = [movq (compileOperand tm opand1) RAX, shlq (compileOperand tm opand2) RAX, movq RAX (compileOperand tm s)]
-binOp (Bin s Lshr ty opand1 opand2) tm = [movq (compileOperand tm opand1) RAX, shrq (compileOperand tm opand2) RAX, movq RAX (compileOperand tm s)]
-binOp (Bin s Ashr ty opand1 opand2) tm = [movq (compileOperand tm opand1) RAX, sarq (compileOperand tm opand2) RAX, movq RAX (compileOperand tm s)]
-binOp (Bin s And ty opand1 opand2) tm = [movq (compileOperand tm opand1) RAX, andq (compileOperand tm opand2) RAX, movq RAX (compileOperand tm s)]
-binOp (Bin s Or ty opand1 opand2) tm = [movq (compileOperand tm opand1) RAX, orq (compileOperand tm opand2) RAX, movq RAX (compileOperand tm s)]
-binOp (Bin s Xor ty opand1 opand2) tm = [movq (compileOperand tm opand1) RAX, xorq (compileOperand tm opand2) RAX, movq RAX (compileOperand tm s)]
+binOp (Bin s Add ty opand1 opand2) tm = [(Movq ,[(compileOperand tm opand1),Reg RAX]), (Addq, [(compileOperand tm opand2),Reg RAX]), (Movq, [Reg RAX, (fromJust (lookup s tm))])]
+binOp (Bin s Sub ty opand1 opand2) tm = [(Movq ,[(compileOperand tm opand1), Reg RAX]), (Subq, [(compileOperand tm opand2), Reg RAX]), (Movq, [Reg RAX, (fromJust (lookup s tm))])]
+binOp (Bin s Mul ty opand1 opand2) tm = [(Movq ,[(compileOperand tm opand1), Reg RAX]), (Imulq, [(compileOperand tm opand2), Reg RAX]), (Movq, [Reg RAX, (fromJust(lookup s tm))])]
+binOp (Bin s Shl ty opand1 opand2) tm = [(Movq ,[(compileOperand tm opand1), Reg RAX]), (Shlq, [(compileOperand tm opand2),Reg RAX]), (Movq, [Reg RAX, (fromJust (lookup s tm))])]
+binOp (Bin s Lshr ty opand1 opand2) tm = [(Movq ,[(compileOperand tm opand1), Reg RAX]), (Shrq, [(compileOperand tm opand2),Reg RAX]), (Movq,[Reg RAX, (fromJust (lookup s tm))])]
+binOp (Bin s Ashr ty opand1 opand2) tm = [(Movq ,[(compileOperand tm opand1), Reg RAX]), (Sarq, [(compileOperand tm opand2),Reg RAX]), (Movq,[Reg RAX, (fromJust (lookup s tm))])]
+binOp (Bin s And ty opand1 opand2) tm = [(Movq ,[(compileOperand tm opand1), Reg RAX]), (Andq, [(compileOperand tm opand2),Reg RAX]), (Movq, [Reg RAX, (fromJust (lookup s tm))])]
+binOp (Bin s Or ty opand1 opand2) tm = [(Movq ,[(compileOperand tm opand1), Reg RAX]), (Orq, [(compileOperand tm opand2),Reg RAX]),(Movq,[Reg RAX, (fromJust (lookup s tm))])]
+binOp (Bin s Xor ty opand1 opand2) tm = [(Movq ,[(compileOperand tm opand1), Reg RAX]), (Xorq, [(compileOperand tm opand2),Reg RAX]),(Movq,[Reg RAX, (fromJust (lookup s tm))])]
   
-
-
-  
-
-
-  
-
 
 compileTerm :: TemporaryMap -> Terminator -> [X86.SourceInstr]
-compileTerm = error "Unimplemented"
+compileTerm tm (Ret t Nothing) = [(Retq,[])]
+compileTerm tm (Ret t (Just o)) = [(Movq,[(compileOperand tm o), Reg RAX])]
+compileTerm tm (Bra s) = [(Jmp, [(fromJust (lookup s tm))])]
+compileTerm tm (CBr op s1 s2) = [(Cmpq ,[(compileOperand tm op),Imm (Literal 1)]),(J Eq,[(fromJust(lookup s1 tm))]),(Jmp,[(fromJust(lookup s2 tm))])]
+
