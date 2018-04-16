@@ -115,7 +115,9 @@ compileInstr ty tm (Call s t s2 tos) = regI ++ stackI ++ [callq ~$$s2, movq ~%RA
                                                         stackArgs = drop 6 tos
                                                         regI = map (\(regi, (t,op)) -> movq ~~(compileOperand tm op) ~%regi) (zip firstArgRegs regArgs)
                                                         stackI = concatMap (\(t,op) -> [movq ~~(compileOperand tm op) ~%RAX, pushq ~%RAX]) stackArgs
-compileInstr ty tm (Bitcast s t o t2) = [ movq ~~(compileOperand tm o) ~%RAX, movq ~%RAX ~~(fromJust(lookup s tm))]--changes operand from type t to type t2 really just a move  
+compileInstr ty tm (Bitcast s t o t2) = [ movq ~~(compileOperand tm o) ~%RAX, movq ~%RAX ~~(fromJust(lookup s tm))]--changes operand from type t to type t2 really just a move
+compileInstr ty tm (Gep s t o ops) = [movq ~$(sizeOf ty t) ~%RAX] ++ addOffset ++ [addq ~%RCX ~%RAX, movq ~%RAX ~~(fromJust(lookup s tm))]
+                                                            where addOffset = concatMap (\(op)->[addq ~$8 ~%RCX]) ops
 
 compileTerm :: TemporaryMap -> Terminator -> [X86.SourceInstr]
 compileTerm tm (Ret t Nothing) = [movq ~%RBP ~%RSP, popq ~%RBP, retq]
