@@ -1,3 +1,11 @@
+{--
+
+name: Luke Dercher
+student_id: l446d901
+class: EECS 665
+
+--}
+
 module Compiler where
 
 import Data.Int
@@ -63,28 +71,13 @@ parseTemps (Call s _ _ _) = [s]
 parseTemps (Bitcast s _ _ _) = [s]
 parseTemps (Gep s _ _ _) = [s] 
 
--- temporaries takes the first string from insts and puts them in list
-
 compileFunction :: Types -> (String, Function) -> X86.Prog
-compileFunction tys (n, (args, retT, cfg@(first,rest))) = [(n, True, Text ([pushq ~%RBP, movq ~%RSP ~%RBP, subq ~$(8 * fromIntegral(length tm)) ~%RSP] ++
+compileFunction tys (n, (args, retT, cfg@(first,rest))) = [(n, True, Text ([pushq ~%RBP, movq ~%RSP ~%RBP, subq ~$(8 * fromIntegral(length tm)) ~%RSP] ++ --prologue
                                                             map (\((t,n), reg) -> movq ~%reg ~~(fromJust (lookup n tm))) (zip args argRegs) ++
-                                                            concatMap (\((t,n), i) -> [ movq ~#(8*1 + 8, RBP) ~%RAX, movq ~%RAX ~~(fromJust (lookup n tm))]) (zip (drop 6 args) [1..]) ++
-                                                            compileBlock tys tm first ))] ++ map (\(n,b) -> (n, False, Text (compileBlock tys tm b))) rest
+                                                            concatMap (\((t,n), i) -> [ movq ~#(8*i + 8, RBP) ~%RAX, movq ~%RAX ~~(fromJust (lookup n tm))]) (zip (drop 6 args) [1..]) ++ compileBlock tys tm first ))] ++
+                                                            map (\(n,b) -> (n, False, Text (compileBlock tys tm b))) rest
                                                 where tm = map (\(i,n) -> (n, IndBoth (-8 * i) RBP)) (zip [1..] (temporaries cfg ++ map snd args))
                                                       argRegs = [RDI, RSI, RDX, RCX, R08, R09]
-
-
---function prologue
--- 1. Push rbp
--- 2. mov rsp into rbp
--- 3. sub from rsp sizof temps
--- function epilogue
--- 1. mvp rbp into rsp
--- 2. pop rbp
--- 3. retq
---temps of cfg
---sub space from rsp
---end function 
 
 compileBlock :: Types -> TemporaryMap -> Block -> [X86.SourceInstr]
 compileBlock ts tm (insts,term) = (concatMap (\n -> compileInstr ts tm n) insts) ++ (compileTerm tm term)
@@ -116,7 +109,7 @@ compileInstr ty tm (Call s t s2 tos) = regI ++ stackI ++ [callq ~$$s2, movq ~%RA
                                                         regI = map (\(regi, (t,op)) -> movq ~~(compileOperand tm op) ~%regi) (zip firstArgRegs regArgs)
                                                         stackI = concatMap (\(t,op) -> [movq ~~(compileOperand tm op) ~%RAX, pushq ~%RAX]) stackArgs
 compileInstr ty tm (Bitcast s t o t2) = [ movq ~~(compileOperand tm o) ~%RAX, movq ~%RAX ~~(fromJust(lookup s tm))]--changes operand from type t to type t2 really just a move
-compileInstr ty tm (Gep s t o ops) = [movq ~$(sizeOf ty t) ~%RAX] ++ addOffset ++ [addq ~%RCX ~%RAX, movq ~%RAX ~~(fromJust(lookup s tm))]
+compileInstr ty tm (Gep s t o ops) = [movq ~~(compileOperand tm o) ~%RAX] ++ addOffset ++ [addq ~%RCX ~%RAX, movq ~%RAX ~~(fromJust(lookup s tm))]
                                                             where addOffset = concatMap (\(op)->[addq ~$8 ~%RCX]) ops
 
 compileTerm :: TemporaryMap -> Terminator -> [X86.SourceInstr]
